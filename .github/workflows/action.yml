@@ -4,23 +4,11 @@ on:
   workflow_dispatch:
 
 jobs:
-  install-htop:
-    runs-on: self-hosted
-
-    steps:
-      - name: Update apt cache
-        run: sudo apt-get update
-
-      - name: Install htop
-        run: sudo apt-get install -y htop
-
-      - name: Verify htop installation
-        run: htop --version
-
   install-docker:
     runs-on: self-hosted
 
     steps:
+    
       - name: Update apt cache
         run: sudo apt-get update
 
