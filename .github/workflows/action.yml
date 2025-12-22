@@ -1,4 +1,4 @@
-name: Install htop
+name: Install htop and Docker
 
 on:
   workflow_dispatch:
@@ -16,3 +16,19 @@ jobs:
 
       - name: Verify htop installation
         run: htop --version
+
+  install-docker:
+    runs-on: self-hosted
+
+    steps:
+      - name: Update apt cache
+        run: sudo apt-get update
+
+      - name: Install Docker
+        run: sudo apt-get install -y docker.io
+
+      - name: Enable and start Docker service
+        run: |
+          sudo systemctl enable docker
+          sudo systemctl start docker
+          sudo systemctl status docker
