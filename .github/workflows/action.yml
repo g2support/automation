@@ -1,4 +1,4 @@
-name: Install htop and Docker
+name: Setup Infrastructure Environment
 
 on:
   workflow_dispatch:
@@ -11,11 +11,42 @@ jobs:
       - name: Update apt cache
         run: sudo apt-get update
 
-      - name: Install Docker
+      - name: Install htop
+        run: sudo apt-get install -y htop
+
+      - name: Check if Docker is installed
+        id: docker_check
+        run: |
+          if command -v docker >/dev/null 2>&1; then
+            echo "docker_installed=true" >> $GITHUB_ENV
+          else
+            echo "docker_installed=false" >> $GITHUB_ENV
+          fi
+
+      - name: Install Docker (only if not installed)
+        if: env.docker_installed == 'false'
         run: sudo apt-get install -y docker.io
 
-      - name: Enable and start Docker service
+      - name: Enable and start Docker (only if newly installed)
+        if: env.docker_installed == 'false'
         run: |
           sudo systemctl enable docker
           sudo systemctl start docker
-          sudo systemctl status docker
+
+      - name: Verify Docker
+        run: docker --version
+
+      - name: Pull Docker image
+        run: sudo docker pull g2support/paymentapprovel:latest
+
+      - name: Stop and remove existing container (if any)
+        run: |
+          sudo docker stop payment-approvel || true
+          sudo docker rm payment-approvel || true
+
+      - name: Run Docker container
+        run: |
+          sudo docker run -d \
+            -p 8080:80 \
+            --name payment-approvel \
+            g2support/paymentapprovel:latest
