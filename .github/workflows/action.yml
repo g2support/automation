@@ -15,7 +15,6 @@ jobs:
         run: sudo apt-get install -y htop
 
       - name: Check if Docker is installed
-        id: docker_check
         run: |
           if command -v docker >/dev/null 2>&1; then
             echo "docker_installed=true" >> $GITHUB_ENV
@@ -36,6 +35,12 @@ jobs:
       - name: Verify Docker
         run: docker --version
 
+
+  deploy-payment-approvel:
+    runs-on: self-hosted
+    needs: setup-environment
+
+    steps:
       - name: Pull Docker image
         run: sudo docker pull g2support/paymentapprovel:latest
 
@@ -47,6 +52,9 @@ jobs:
       - name: Run Docker container
         run: |
           sudo docker run -d \
+            --restart unless-stopped \
             -p 8080:80 \
             --name payment-approvel \
             g2support/paymentapprovel:latest
+      - name: Verify running container
+        run: sudo docker ps | grep payment-approvel
