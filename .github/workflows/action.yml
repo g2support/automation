@@ -8,53 +8,101 @@ jobs:
     runs-on: self-hosted
 
     steps:
-      - name: Update apt cache
-        run: sudo apt-get update
+      - name: Update system
+        run: sudo apt-get update -y
 
-      - name: Install htop
-        run: sudo apt-get install -y htop
+      - name: Install base utilities
+        run: sudo apt-get install -y \
+          ca-certificates \
+          curl \
+          gnupg \
+          lsb-release \
+          dos2unix \
+          iconv
 
-      - name: Check if Docker is installed
+      - name: Install Docker (if missing)
         run: |
-          if command -v docker >/dev/null 2>&1; then
-            echo "docker_installed=true" >> $GITHUB_ENV
-          else
-            echo "docker_installed=false" >> $GITHUB_ENV
+          if ! command -v docker >/dev/null 2>&1; then
+            sudo apt-get install -y docker.io
+            sudo systemctl enable docker
+            sudo systemctl start docker
           fi
 
-      - name: Install Docker (only if not installed)
-        if: env.docker_installed == 'false'
-        run: sudo apt-get install -y docker.io
-
-      - name: Enable and start Docker (only if newly installed)
-        if: env.docker_installed == 'false'
+      - name: Install Docker Compose v2 plugin
         run: |
-          sudo systemctl enable docker
-          sudo systemctl start docker
+          sudo mkdir -p /usr/local/lib/docker/cli-plugins
+          sudo curl -SL https://github.com/docker/compose/releases/download/v2.27.0/docker-compose-linux-x86_64 \
+            -o /usr/local/lib/docker/cli-plugins/docker-compose
+          sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
 
-      - name: Verify Docker
-        run: docker --version
-
+      - name: Verify Docker & Compose
+        run: |
+          docker --version
+          docker compose version
 
   deploy-payment-approvel:
     runs-on: self-hosted
     needs: setup-environment
 
     steps:
-      - name: Pull Docker image
-        run: sudo docker pull g2support/paymentapprovel:latest
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Stop and remove existing container (if any)
+      # -------------------- SQL NORMALIZATION --------------------
+      - name: Normalize SQL backup (UTF-16 → UTF-8 + lowercase)
         run: |
-          sudo docker stop payment-approvel || true
-          sudo docker rm payment-approvel || true
+          echo "Converting SQL file encoding..."
+          iconv -f UTF-16 -t UTF-8 backup.sql > backup_utf8.sql
 
-      - name: Run Docker container
+          echo "Fixing line endings..."
+          dos2unix backup_utf8.sql
+
+          echo "Normalizing table names to lowercase..."
+          sed -i 's/`CGVak_EmployeeMaster`/`cgvak_employeemaster`/g' backup_utf8.sql
+          sed -i 's/ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci/ENGINE=InnoDB DEFAULT CHARSET=utf8mb4/g' backup_utf8.sql
+
+      # -------------------- MYSQL --------------------
+      - name: Stop old MySQL (if any)
         run: |
-          sudo docker run -d \
+          docker stop mysql-db || true
+          docker rm mysql-db || true
+
+      - name: Start MySQL container
+        run: |
+          docker run -d \
+            --name mysql-db \
+            -e MYSQL_ROOT_PASSWORD=rootpass \
+            -e MYSQL_DATABASE=pass \
+            -p 3306:3306 \
+            mysql:8.0
+
+      - name: Wait for MySQL
+        run: |
+          echo "Waiting for MySQL to be ready..."
+          sleep 25
+
+      - name: Restore database
+        run: |
+          docker exec -i mysql-db \
+          mysql --binary-mode=1 -uroot -prootpass pass < backup_utf8.sql
+
+      # -------------------- APPLICATION --------------------
+      - name: Pull application image
+        run: docker pull g2support/paymentapprovel:latest
+
+      - name: Stop old app container
+        run: |
+          docker stop payment-approvel || true
+          docker rm payment-approvel || true
+
+      - name: Run application container
+        run: |
+          docker run -d \
             --restart unless-stopped \
-            -p 8080:80 \
             --name payment-approvel \
+            -p 8080:80 \
+            --link mysql-db:mysql-db \
             g2support/paymentapprovel:latest
-      - name: Verify running container
-        run: sudo docker ps | grep payment-approvel
+
+      - name: Verify running containers
+        run: docker ps
