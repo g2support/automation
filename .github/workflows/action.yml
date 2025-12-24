@@ -12,13 +12,9 @@ jobs:
         run: sudo apt-get update -y
 
       - name: Install base utilities
-        run: sudo apt-get install -y \
-          ca-certificates \
-          curl \
-          gnupg \
-          lsb-release \
-          dos2unix \
-          iconv
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y ca-certificates curl gnupg lsb-release dos2unix
 
       - name: Install Docker (if missing)
         run: |
