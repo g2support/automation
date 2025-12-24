@@ -13,7 +13,6 @@ jobs:
 
       - name: Install base utilities
         run: |
-          sudo apt-get update -y
           sudo apt-get install -y ca-certificates curl gnupg lsb-release dos2unix
 
       - name: Install Docker (if missing)
@@ -41,24 +40,34 @@ jobs:
     needs: setup-environment
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: Debug SQL file location
+        run: |
+          echo "Current directory: $(pwd)"
+          ls -lah /home/g2tech/actions-runner
+          if [ ! -f "/home/g2tech/actions-runner/backup.sql" ]; then
+            echo "❌ SQL backup file not found!"
+            exit 1
+          fi
 
       # -------------------- SQL NORMALIZATION --------------------
-      - name: Normalize SQL backup (UTF-16 → UTF-8 + lowercase)
+      - name: Normalize SQL backup
         run: |
-          echo "Converting SQL file encoding..."
-          iconv -f UTF-16 -t UTF-8 backup.sql > backup_utf8.sql
+          SQL_PATH=/home/g2tech/actions-runner/backup.sql
+
+          echo "Converting SQL file encoding from UTF-16 to UTF-8..."
+          iconv -f UTF-16 -t UTF-8 "$SQL_PATH" > backup_utf8.sql
 
           echo "Fixing line endings..."
           dos2unix backup_utf8.sql
 
-          echo "Normalizing table names to lowercase..."
+          echo "Normalizing table names to lowercase (Linux MySQL safe)..."
           sed -i 's/`CGVak_EmployeeMaster`/`cgvak_employeemaster`/g' backup_utf8.sql
           sed -i 's/ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci/ENGINE=InnoDB DEFAULT CHARSET=utf8mb4/g' backup_utf8.sql
 
+          echo "✅ SQL backup normalized and ready as backup_utf8.sql"
+
       # -------------------- MYSQL --------------------
-      - name: Stop old MySQL (if any)
+      - name: Stop old MySQL container (if any)
         run: |
           docker stop mysql-db || true
           docker rm mysql-db || true
@@ -72,26 +81,27 @@ jobs:
             -p 3306:3306 \
             mysql:8.0
 
-      - name: Wait for MySQL
+      - name: Wait for MySQL to be ready
         run: |
-          echo "Waiting for MySQL to be ready..."
+          echo "Waiting 25 seconds for MySQL to start..."
           sleep 25
 
       - name: Restore database
         run: |
           docker exec -i mysql-db \
-          mysql --binary-mode=1 -uroot -prootpass pass < backup_utf8.sql
+            mysql --binary-mode=1 -uroot -prootpass pass < backup_utf8.sql
+          echo "✅ Database restored successfully"
 
       # -------------------- APPLICATION --------------------
-      - name: Pull application image
-        run: docker pull g2support/paymentapprovel:latest
-
-      - name: Stop old app container
+      - name: Stop old app container (if any)
         run: |
           docker stop payment-approvel || true
           docker rm payment-approvel || true
 
-      - name: Run application container
+      - name: Pull application image
+        run: docker pull g2support/paymentapprovel:latest
+
+      - name: Run PHP application container
         run: |
           docker run -d \
             --restart unless-stopped \
