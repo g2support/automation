@@ -69,12 +69,12 @@ jobs:
       # -------------------- MYSQL --------------------
       - name: Stop old MySQL container (if any)
         run: |
-          docker stop mysql-db || true
-          docker rm mysql-db || true
+          sudo docker stop mysql-db || true
+          sudo docker rm mysql-db || true
 
       - name: Start MySQL container
         run: |
-          docker run -d \
+          sudo docker run -d \
             --name mysql-db \
             -e MYSQL_ROOT_PASSWORD=rootpass \
             -e MYSQL_DATABASE=pass \
@@ -88,22 +88,21 @@ jobs:
 
       - name: Restore database
         run: |
-          docker exec -i mysql-db \
+          sudo docker exec -i mysql-db \
             mysql --binary-mode=1 -uroot -prootpass pass < backup_utf8.sql
           echo "✅ Database restored successfully"
 
       # -------------------- APPLICATION --------------------
       - name: Stop old app container (if any)
         run: |
-          docker stop payment-approvel || true
-          docker rm payment-approvel || true
+          sudo docker stop payment-approvel || true
+          sudo docker rm payment-approvel || true
 
       - name: Pull application image
-        run: docker pull g2support/paymentapprovel:latest
-
+        run: sudo docker pull g2support/paymentapprovel:latest
       - name: Run PHP application container
         run: |
-          docker run -d \
+          sudo docker run -d \
             --restart unless-stopped \
             --name payment-approvel \
             -p 8080:80 \
@@ -111,4 +110,4 @@ jobs:
             g2support/paymentapprovel:latest
 
       - name: Verify running containers
-        run: docker ps
+        run: sudo docker ps
