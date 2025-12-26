@@ -124,4 +124,4 @@ Workflows can directly reference this path:
 
 ## Maintained by
 
-G2 SA-Team /DevOps
+G2 SA-Team / DevOps
